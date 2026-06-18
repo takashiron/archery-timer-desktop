@@ -1,0 +1,751 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アーチェリータイマー</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Roboto+Mono:wght@700&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .timer-display-font {
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        #customSettings,
+        #chimeTimeSetting {
+            transition: all 0.3s ease-in-out;
+            overflow: hidden;
+        }
+
+        #customSettings {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        #customSettings.open {
+            max-height: 200px;
+            opacity: 1;
+        }
+
+        #chimeTimeSetting.hidden {
+            max-height: 0 !important;
+            opacity: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+
+        button:disabled {
+            background-color: #9ca3af;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .timer-box {
+            transition: all 0.2s ease-in-out;
+            border: 2px solid transparent;
+        }
+
+        .timer-active {
+            border-color: #3b82f6;
+            /* blue-500 */
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+
+        /* タイマー専用ウィンドウ用のスタイル */
+        .tv-timer-active {
+            border-color: #3b82f6 !important;
+            transform: scale(1.05);
+            box-shadow: 0 0 40px rgba(59, 130, 246, 0.8);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4 transition-colors duration-300">
+
+    <!-- ==========================================
+         コントロールウィンドウ UI
+         ========================================== -->
+    <div id="controlView" class="w-full max-w-md mx-auto bg-white rounded-2xl shadow-lg p-6 md:p-8 space-y-6">
+        <header class="text-center">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">アーチェリータイマー<br><span
+                    class="text-sm text-gray-500">コントロールパネル</span></h1>
+        </header>
+
+        <button id="openTimerBtn"
+            class="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg shadow-md hover:bg-indigo-700 transition flex justify-center items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+            別ウィンドウでタイマーを開く
+        </button>
+
+        <!-- 設定パネル -->
+        <div id="settingsPanel" class="space-y-4 border-t pt-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="preset" class="block text-sm font-bold text-gray-600 mb-1">モード</label>
+                    <select id="preset"
+                        class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="individual">個人戦 (180秒)</option>
+                        <option value="individual_90">個人戦 (90秒)</option>
+                        <option value="individual_60">個人戦 (60秒)</option>
+                        <option value="team">団体戦 (120秒)</option>
+                        <option value="mixed">混合戦 (80秒)</option>
+                        <option value="individual_so">個人戦SO (20秒)</option>
+                        <option value="team_so">団体戦SO (60秒)</option>
+                        <option value="mixed_so">混合戦SO (40秒)</option>
+                        <option value="custom">カスタム</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="format" class="block text-sm font-bold text-gray-600 mb-1">形式</label>
+                    <select id="format"
+                        class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="simultaneous">同時射ち</option>
+                        <option value="alternate">交互射ち</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="customSettings">
+                <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border">
+                    <div>
+                        <label for="customSeconds" class="block text-sm font-bold text-gray-600 mb-1">秒数/射</label>
+                        <input type="number" id="customSeconds" value="20" min="1"
+                            class="w-full p-2 border rounded-md text-center text-lg">
+                    </div>
+                    <div>
+                        <label for="customArrows" class="block text-sm font-bold text-gray-600 mb-1">射数</label>
+                        <input type="number" id="customArrows" value="6" min="1"
+                            class="w-full p-2 border rounded-md text-center text-lg">
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-gray-50 p-4 rounded-lg border">
+                    <label class="block font-bold text-gray-700 mb-3">リピート</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="repeatCountInput" value="0" min="0"
+                            class="w-full p-2 border rounded-md text-center text-lg">
+                        <span class="font-bold text-gray-600">回</span>
+                    </div>
+                </div>
+
+                <div id="chimeSettings" class="bg-gray-50 p-4 rounded-lg border space-y-3">
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" id="enableChimeInput"
+                            class="h-5 w-5 rounded text-blue-600 focus:ring-blue-500 border-gray-300">
+                        <span class="font-bold text-gray-700">時報</span>
+                    </label>
+                    <div id="chimeTimeSetting" class="pl-8">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-gray-600">残り</span>
+                            <input type="number" id="chimeTimeInput" value="30" min="1"
+                                class="w-full p-2 border rounded-md text-center text-lg">
+                            <span class="font-bold text-gray-600">秒</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 小さいプレビュータイマー -->
+        <div class="text-center py-4 bg-gray-50 rounded-lg border">
+            <div id="statusDisplay" class="text-lg font-bold min-h-[28px] mb-1 text-blue-600">待機中</div>
+            <div id="singleTimerDisplay" class="timer-display-font text-5xl font-bold text-gray-800">0:00</div>
+            <div id="alternateTimerDisplay" class="hidden flex justify-center gap-4 items-center px-4">
+                <div id="timer1Box" class="timer-box flex-1 p-2 rounded-lg bg-white border">
+                    <div class="text-xs font-bold text-gray-500">T1</div>
+                    <div id="timer1Display" class="timer-display-font text-3xl font-bold text-gray-800">0:00</div>
+                </div>
+                <div id="timer2Box" class="timer-box flex-1 p-2 rounded-lg bg-white border">
+                    <div class="text-xs font-bold text-gray-500">T2</div>
+                    <div id="timer2Display" class="timer-display-font text-3xl font-bold text-gray-800">0:00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作ボタン -->
+        <div id="controls" class="grid grid-cols-4 gap-2">
+            <button id="startButton" title="スタート / 再開"
+                class="flex items-center justify-center w-full py-3 text-white bg-green-500 rounded-lg shadow-md hover:bg-green-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                        clip-rule="evenodd" />
+                </svg>
+            </button>
+            <button id="pauseButton" title="一時停止"
+                class="flex items-center justify-center w-full py-3 text-white bg-yellow-500 rounded-lg shadow-md hover:bg-yellow-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 7h2v6H7zm4 0h2v6h-2z"
+                        clip-rule="evenodd" />
+                </svg>
+            </button>
+            <button id="changeButton" title="交代"
+                class="hidden flex items-center justify-center w-full py-3 text-white bg-blue-500 rounded-lg shadow-md hover:bg-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                        d="M8 5a1 1 0 100 2h5.586l-1.293 1.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L13.586 5H8zM12 15a1 1 0 100-2H6.414l1.293-1.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L6.414 15H12z" />
+                </svg>
+            </button>
+            <button id="stopButton" title="終了 / 次へ"
+                class="flex items-center justify-center w-full py-3 text-white bg-red-500 rounded-lg shadow-md hover:bg-red-600">
+                <svg id="stopIcon" xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20"
+                    fill="currentColor">
+                    <path fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H7z"
+                        clip-rule="evenodd" />
+                </svg>
+                <svg id="nextIcon" xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 hidden" viewBox="0 0 20 20"
+                    fill="currentColor">
+                    <path fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z"
+                        clip-rule="evenodd" />
+                </svg>
+            </button>
+            <button id="resetButton" title="リセット"
+                class="flex items-center justify-center w-full py-3 text-white bg-gray-600 rounded-lg shadow-md hover:bg-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd"
+                        d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                        clip-rule="evenodd" />
+                </svg>
+            </button>
+        </div>
+        <p class="text-right text-xs text-gray-400 mt-4">KAWANO INDUSTRIES</p>
+    </div>
+
+    <!-- ==========================================
+         タイマー専用ウィンドウ UI (別窓用)
+         ========================================== -->
+    <div id="timerView" class="hidden w-full h-screen bg-black flex flex-col items-center justify-center p-8">
+        <!-- 音声再生許可用のオーバーレイ -->
+        <div id="audioUnlock"
+            class="absolute inset-0 bg-black/90 text-white flex flex-col items-center justify-center z-50 cursor-pointer hover:bg-black/80 transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mb-4 text-blue-500 animate-pulse" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+            </svg>
+            <h2 class="text-4xl md:text-5xl font-bold">画面をクリックして<br>タイマーを有効化</h2>
+            <p class="mt-4 text-gray-400">※ブラウザの制限により、音声を鳴らすための操作が必要です</p>
+        </div>
+
+        <div id="tvStatusDisplay" class="text-[5vw] font-bold mb-[2vh] text-blue-500 text-center">待機中</div>
+
+        <!-- 同時射ち用 -->
+        <div id="tvSingleTimerDisplay"
+            class="timer-display-font text-[30vw] font-bold text-white leading-none text-center tabular-nums">0:00</div>
+
+        <!-- 交互射ち用 -->
+        <div id="tvAlternateTimerDisplay" class="hidden w-full max-w-[90vw] grid grid-cols-2 gap-[5vw] items-center">
+            <div id="tvTimer1Box"
+                class="timer-box p-[3vw] rounded-3xl bg-gray-900 border-4 border-gray-800 flex flex-col items-center">
+                <div class="text-[3vw] font-bold text-gray-400 mb-[2vh]">タイマー1</div>
+                <div id="tvTimer1Display"
+                    class="timer-display-font text-[20vw] font-bold text-white leading-none tabular-nums">0:00</div>
+            </div>
+            <div id="tvTimer2Box"
+                class="timer-box p-[3vw] rounded-3xl bg-gray-900 border-4 border-gray-800 flex flex-col items-center">
+                <div class="text-[3vw] font-bold text-gray-400 mb-[2vh]">タイマー2</div>
+                <div id="tvTimer2Display"
+                    class="timer-display-font text-[20vw] font-bold text-white leading-none tabular-nums">0:00</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 共通設定・マルチウィンドウ判別 ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTimerMode = urlParams.get('mode') === 'timer';
+        const bc = new BroadcastChannel('archery_timer_channel');
+
+        // --- Tone.js (音声) ---
+        let synth;
+        async function initializeAudio() {
+            if (Tone.context.state !== 'running') await Tone.start();
+            if (!synth) {
+                synth = new Tone.Synth({
+                    oscillator: { type: 'sine' },
+                    envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.4 }
+                }).toDestination();
+                synth.volume.value = 10;
+            }
+        }
+        function doPlayBuzzer(count) {
+            if (!synth) return;
+            const now = Tone.now();
+            for (let i = 0; i < count; i++) synth.triggerAttackRelease('C5', '8n.', now + i * 1.0);
+        }
+        function doPlayChime() {
+            if (!synth) return;
+            const now = Tone.now();
+            synth.triggerAttackRelease('A5', '8n', now);
+        }
+        function playBuzzer(count) {
+            doPlayBuzzer(count);
+            if (!isTimerMode) bc.postMessage({ type: 'BUZZER', count: count });
+        }
+        function playChime() {
+            doPlayChime();
+            if (!isTimerMode) bc.postMessage({ type: 'CHIME' });
+        }
+
+        // ==========================================
+        // タイマーウィンドウ専用ロジック
+        // ==========================================
+        if (isTimerMode) {
+            document.title = "アーチェリータイマー (表示用)";
+            document.getElementById('controlView').classList.add('hidden');
+            document.getElementById('timerView').classList.remove('hidden');
+            document.body.classList.remove('bg-gray-100', 'p-4');
+            document.body.classList.add('bg-black', 'm-0', 'p-0', 'overflow-hidden');
+
+            const audioUnlock = document.getElementById('audioUnlock');
+            audioUnlock.addEventListener('click', async () => {
+                await initializeAudio();
+                audioUnlock.classList.add('hidden');
+                // 解除の合図をコントロール側に送ることも可能
+            });
+
+            bc.onmessage = (event) => {
+                const { type, payload, count } = event.data;
+                if (type === 'SYNC') {
+                    const statusEl = document.getElementById('tvStatusDisplay');
+                    statusEl.textContent = payload.statusText;
+
+                    // 色の同期 (Tailwindのクラスから色を抽出して適用)
+                    if (payload.statusClass.includes('text-blue-600')) statusEl.className = 'text-[5vw] font-bold mb-[2vh] text-center text-blue-500';
+                    else if (payload.statusClass.includes('text-yellow-500')) statusEl.className = 'text-[5vw] font-bold mb-[2vh] text-center text-yellow-500';
+                    else if (payload.statusClass.includes('text-green-600')) statusEl.className = 'text-[5vw] font-bold mb-[2vh] text-center text-green-500';
+                    else if (payload.statusClass.includes('text-gray-500')) statusEl.className = 'text-[5vw] font-bold mb-[2vh] text-center text-gray-500';
+
+                    if (payload.isAlternate) {
+                        document.getElementById('tvSingleTimerDisplay').classList.add('hidden');
+                        document.getElementById('tvAlternateTimerDisplay').classList.remove('hidden');
+
+                        document.getElementById('tvTimer1Display').textContent = payload.time1Display;
+                        document.getElementById('tvTimer2Display').textContent = payload.time2Display;
+
+                        const box1 = document.getElementById('tvTimer1Box');
+                        const box2 = document.getElementById('tvTimer2Box');
+
+                        box1.classList.toggle('tv-timer-active', payload.activeTimer === 1 && !payload.isTimer1Finished && payload.state === 'shooting');
+                        box2.classList.toggle('tv-timer-active', payload.activeTimer === 2 && !payload.isTimer2Finished && payload.state === 'shooting');
+                    } else {
+                        document.getElementById('tvSingleTimerDisplay').classList.remove('hidden');
+                        document.getElementById('tvAlternateTimerDisplay').classList.add('hidden');
+                        document.getElementById('tvSingleTimerDisplay').textContent = payload.timeDisplay;
+                    }
+                } else if (type === 'BUZZER') {
+                    doPlayBuzzer(count);
+                } else if (type === 'CHIME') {
+                    doPlayChime();
+                }
+            };
+        }
+
+        // ==========================================
+        // コントロールウィンドウ専用ロジック
+        // ==========================================
+        else {
+            // --- DOM Elements (Controls) ---
+            const presetSelect = document.getElementById('preset'), formatSelect = document.getElementById('format');
+            const customSettingsDiv = document.getElementById('customSettings'), customSecondsInput = document.getElementById('customSeconds'), customArrowsInput = document.getElementById('customArrows');
+            const statusDisplay = document.getElementById('statusDisplay'), singleTimerDisplay = document.getElementById('singleTimerDisplay'), alternateTimerDisplay = document.getElementById('alternateTimerDisplay');
+            const timer1Box = document.getElementById('timer1Box'), timer2Box = document.getElementById('timer2Box');
+            const timer1Display = document.getElementById('timer1Display'), timer2Display = document.getElementById('timer2Display');
+            const startButton = document.getElementById('startButton'), pauseButton = document.getElementById('pauseButton'), changeButton = document.getElementById('changeButton'), stopButton = document.getElementById('stopButton'), resetButton = document.getElementById('resetButton');
+            const stopIcon = document.getElementById('stopIcon'), nextIcon = document.getElementById('nextIcon');
+            const controls = document.getElementById('controls');
+            const repeatCountInput = document.getElementById('repeatCountInput');
+            const enableChimeInput = document.getElementById('enableChimeInput');
+            const chimeTimeSetting = document.getElementById('chimeTimeSetting');
+            const chimeTimeInput = document.getElementById('chimeTimeInput');
+
+            // --- State ---
+            let timerInterval = null, totalSeconds = 0;
+            let timeRemaining = 0, timeRemaining1 = 0, timeRemaining2 = 0;
+            let isPaused = false, isTimer1Finished = false, isTimer2Finished = false;
+            let countdownState = 'idle', activeTimer = 1, changePressCount = 0;
+            let currentRepeat = 0;
+
+            // --- 別窓を開く ---
+            document.getElementById('openTimerBtn').addEventListener('click', () => {
+                // ブラウザ環境向けにパスを動的に取得
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('mode', 'timer');
+
+                // Canvas環境ではwindow.openがブロックされるため、
+                // Electronでの実行時はmain.jsにIPC通信を送るなどの処理が本来は理想ですが、
+                // ローカルブラウザでのテスト用にhrefを使用します。
+                window.open(currentUrl.toString(), 'ArcheryTimerWindow', 'width=1024,height=768,menubar=no,toolbar=no,location=no,status=no');
+            });
+
+            // --- Broadcast State ---
+            function broadcastState() {
+                bc.postMessage({
+                    type: 'SYNC',
+                    payload: {
+                        state: countdownState,
+                        timeDisplay: singleTimerDisplay.textContent,
+                        time1Display: timer1Display.textContent,
+                        time2Display: timer2Display.textContent,
+                        statusText: statusDisplay.textContent,
+                        statusClass: statusDisplay.className,
+                        isAlternate: formatSelect.value === 'alternate',
+                        activeTimer: activeTimer,
+                        isTimer1Finished: isTimer1Finished,
+                        isTimer2Finished: isTimer2Finished
+                    }
+                });
+            }
+
+            // --- UI & Logic ---
+            const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+            function calculateTotalSeconds() {
+                const mode = presetSelect.value;
+                if (mode === 'individual') return 180;
+                if (mode === 'individual_90') return 90;
+                if (mode === 'individual_60') return 60;
+                if (mode === 'team') return 120;
+                if (mode === 'mixed') return 80;
+                if (mode === 'team_so') return 60;
+                if (mode === 'mixed_so') return 40;
+                if (mode === 'individual_so') return 20;
+                return (parseInt(customSecondsInput.value) || 0) * (parseInt(customArrowsInput.value) || 0);
+            }
+
+            function updateDefaultChimeTime() {
+                const mode = presetSelect.value;
+                if (mode === 'team' || mode === 'mixed') chimeTimeInput.value = 20;
+                else if (mode === 'individual' || mode === 'individual_90' || mode === 'individual_60') chimeTimeInput.value = 30;
+                else if (mode === 'team_so' || mode === 'mixed_so' || mode === 'individual_so') chimeTimeInput.value = 10;
+                else if (mode === 'custom') chimeTimeInput.value = customSecondsInput.value;
+            }
+
+            function getMaxChangeCount() {
+                const mode = presetSelect.value;
+                switch (mode) {
+                    case 'team_so': return 5;
+                    case 'individual_60': return 5;
+                    case 'mixed_so': return 3;
+                    case 'individual_so': return 1;
+                    default: return 3;
+                }
+            }
+
+            function resetTimersToFull() {
+                totalSeconds = calculateTotalSeconds();
+                timeRemaining = totalSeconds;
+                timeRemaining1 = totalSeconds;
+                timeRemaining2 = totalSeconds;
+                updateTimerDisplayUI();
+            }
+
+            function updateTimerDisplayUI() {
+                const displayTime = (countdownState === 'prep') ? totalSeconds : Math.max(0, timeRemaining);
+                const displayTime1 = (countdownState === 'prep') ? totalSeconds : Math.max(0, timeRemaining1);
+                const displayTime2 = (countdownState === 'prep') ? totalSeconds : Math.max(0, timeRemaining2);
+
+                if (formatSelect.value === 'simultaneous') {
+                    singleTimerDisplay.textContent = formatTime(displayTime);
+                } else {
+                    timer1Display.textContent = formatTime(displayTime1);
+                    timer2Display.textContent = formatTime(displayTime2);
+                    timer1Box.classList.toggle('timer-active', activeTimer === 1 && !isTimer1Finished && countdownState === 'shooting');
+                    timer2Box.classList.toggle('timer-active', activeTimer === 2 && !isTimer2Finished && countdownState === 'shooting');
+                }
+                broadcastState();
+            }
+
+            function setUIState(state) {
+                const isAlternate = formatSelect.value === 'alternate';
+                singleTimerDisplay.classList.toggle('hidden', isAlternate);
+                alternateTimerDisplay.classList.toggle('hidden', !isAlternate);
+
+                const buttonConfig = {
+                    simultaneous: ['startButton', 'pauseButton', 'stopButton', 'resetButton'],
+                    alternate: ['startButton', 'pauseButton', 'changeButton', 'stopButton', 'resetButton']
+                };
+                const visibleButtons = buttonConfig[isAlternate ? 'alternate' : 'simultaneous'];
+                [startButton, pauseButton, changeButton, stopButton, resetButton].forEach(btn => {
+                    btn.classList.toggle('hidden', !visibleButtons.includes(btn.id));
+                });
+                controls.className = `grid grid-cols-${visibleButtons.length} gap-2`;
+
+                const totalRepeats = parseInt(repeatCountInput.value) || 0;
+                const isLastRound = currentRepeat >= totalRepeats;
+                const isRepeatingAndNotLast = totalRepeats > 0 && !isLastRound;
+
+                if (state === 'idle') {
+                    startButton.disabled = false;
+                    pauseButton.disabled = true;
+                    changeButton.disabled = true;
+                    stopButton.disabled = true;
+                    resetButton.disabled = true;
+                    document.querySelectorAll('#settingsPanel select, #settingsPanel input').forEach(el => el.disabled = false);
+                    chimeTimeInput.disabled = !enableChimeInput.checked;
+                    statusDisplay.textContent = '待機中';
+                    statusDisplay.className = 'text-lg md:text-xl font-bold min-h-[28px] mb-1 text-blue-600';
+                    stopIcon.classList.remove('hidden');
+                    nextIcon.classList.add('hidden');
+                } else if (state === 'running' || state === 'paused') {
+                    if (isRepeatingAndNotLast) {
+                        stopIcon.classList.add('hidden');
+                        nextIcon.classList.remove('hidden');
+                    } else {
+                        stopIcon.classList.remove('hidden');
+                        nextIcon.classList.add('hidden');
+                    }
+
+                    if (state === 'paused') {
+                        startButton.disabled = false;
+                        pauseButton.disabled = true;
+                        changeButton.disabled = true;
+                        statusDisplay.textContent = '一時停止中';
+                        statusDisplay.className = 'text-lg md:text-xl font-bold min-h-[28px] mb-1 text-gray-500';
+                    } else {
+                        startButton.disabled = true;
+                        pauseButton.disabled = false;
+                        const maxChanges = getMaxChangeCount();
+                        changeButton.disabled = isTimer1Finished || countdownState === 'prep' || (isAlternate && changePressCount >= maxChanges);
+                    }
+                    stopButton.disabled = false;
+                    resetButton.disabled = false;
+                    document.querySelectorAll('#settingsPanel select, #settingsPanel input').forEach(el => el.disabled = true);
+                }
+                broadcastState();
+            }
+
+            function endFirstHalf(playSound) {
+                if (isTimer1Finished) return;
+                isTimer1Finished = true;
+                if (playSound) playBuzzer(1);
+                activeTimer = 2;
+                changeButton.disabled = true;
+                updateTimerDisplayUI();
+                if (isTimer2Finished) handleStop(true);
+            }
+
+            function tick() {
+                const totalRepeats = parseInt(repeatCountInput.value) || 0;
+                const repeatStatus = totalRepeats > 0 ? ` (${currentRepeat + 1}/${totalRepeats + 1})` : '';
+
+                if (countdownState === 'prep') {
+                    timeRemaining--;
+                    statusDisplay.textContent = `ムーブアップ (開始まで ${timeRemaining} 秒)${repeatStatus}`;
+                    if (timeRemaining <= 0) {
+                        countdownState = 'shooting';
+                        timeRemaining = totalSeconds;
+                        statusDisplay.textContent = '行射中' + repeatStatus;
+                        statusDisplay.className = 'text-lg md:text-xl font-bold min-h-[28px] mb-1 text-green-600';
+                        playBuzzer(1);
+                        setUIState('running');
+                    }
+                } else if (countdownState === 'shooting') {
+                    let currentRemaining;
+                    if (formatSelect.value === 'simultaneous') {
+                        timeRemaining--;
+                        currentRemaining = timeRemaining;
+                        if (timeRemaining === 0) {
+                            updateTimerDisplayUI();
+                            handleStop(true);
+                            return;
+                        } else if (timeRemaining < 0) return;
+                    } else {
+                        if (activeTimer === 1 && !isTimer1Finished) {
+                            timeRemaining1--;
+                            currentRemaining = timeRemaining1;
+                            if (timeRemaining1 === 0) {
+                                const maxChanges = getMaxChangeCount();
+                                updateTimerDisplayUI();
+                                endFirstHalf(changePressCount < maxChanges);
+                            }
+                        } else if (activeTimer === 2 && !isTimer2Finished) {
+                            timeRemaining2--;
+                            currentRemaining = timeRemaining2;
+                            if (timeRemaining2 === 0) {
+                                isTimer2Finished = true;
+                                updateTimerDisplayUI();
+                                handleStop(true);
+                                return;
+                            } else if (timeRemaining2 < 0) return;
+                        } else {
+                            currentRemaining = (activeTimer === 1) ? timeRemaining1 : timeRemaining2;
+                        }
+                    }
+                    if (enableChimeInput.checked && currentRemaining !== undefined && currentRemaining === parseInt(chimeTimeInput.value)) {
+                        playChime();
+                    }
+                }
+                updateTimerDisplayUI();
+            }
+
+            function handleStart() {
+                if (isPaused) {
+                    isPaused = false;
+                    timerInterval = setInterval(tick, 1000);
+                    setUIState('running');
+                    const totalRepeats = parseInt(repeatCountInput.value) || 0;
+                    const repeatStatus = totalRepeats > 0 ? ` (${currentRepeat + 1}/${totalRepeats + 1})` : '';
+                    if (countdownState === 'prep') statusDisplay.textContent = `ムーブアップ (開始まで ${timeRemaining} 秒)${repeatStatus}`;
+                    else statusDisplay.textContent = '行射中' + repeatStatus;
+                } else {
+                    totalSeconds = calculateTotalSeconds();
+                    currentRepeat = 0;
+                    countdownState = 'prep';
+                    timeRemaining = 10;
+                    timeRemaining1 = totalSeconds;
+                    timeRemaining2 = totalSeconds;
+                    isTimer1Finished = false;
+                    isTimer2Finished = false;
+                    activeTimer = 1;
+                    changePressCount = 0;
+                    playBuzzer(2);
+
+                    const totalRepeats = parseInt(repeatCountInput.value) || 0;
+                    const repeatStatus = totalRepeats > 0 ? ` (${currentRepeat + 1}/${totalRepeats + 1})` : '';
+                    statusDisplay.textContent = `ムーブアップ (開始 ${timeRemaining} 秒前)${repeatStatus}`;
+                    statusDisplay.className = 'text-lg md:text-xl font-bold min-h-[28px] mb-1 text-yellow-500';
+
+                    setUIState('running');
+                    updateTimerDisplayUI();
+                    timerInterval = setInterval(tick, 1000);
+                }
+                broadcastState();
+            }
+
+            function handlePause() {
+                if (isPaused || countdownState === 'idle') return;
+                isPaused = true;
+                clearInterval(timerInterval);
+                setUIState('paused');
+            }
+
+            function handleChange() {
+                if (isTimer1Finished) return;
+                const maxChanges = getMaxChangeCount();
+                if (changePressCount >= maxChanges) {
+                    changeButton.disabled = true;
+                    return;
+                }
+                changePressCount++;
+                activeTimer = (activeTimer === 1) ? 2 : 1;
+                updateTimerDisplayUI();
+                if (changePressCount >= maxChanges) changeButton.disabled = true;
+            }
+
+            function handleStop(isNaturalEnd = false) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                isPaused = false;
+
+                const totalRepeats = parseInt(repeatCountInput.value) || 0;
+                const isLastRound = currentRepeat >= totalRepeats;
+
+                if (isNaturalEnd && totalRepeats > 0 && !isLastRound) {
+                    currentRepeat++;
+                    countdownState = 'prep';
+                    timeRemaining = 10;
+                    timeRemaining1 = totalSeconds;
+                    timeRemaining2 = totalSeconds;
+                    isTimer1Finished = false;
+                    isTimer2Finished = false;
+                    activeTimer = 1;
+                    changePressCount = 0;
+                    playBuzzer(2);
+                    const repeatStatus = ` (${currentRepeat + 1}/${totalRepeats + 1})`;
+                    statusDisplay.textContent = `ムーブアップ (開始まで ${timeRemaining} 秒)${repeatStatus}`;
+                    statusDisplay.className = 'text-lg md:text-xl font-bold min-h-[28px] mb-1 text-yellow-500';
+
+                    setUIState('running');
+                    updateTimerDisplayUI();
+                    timerInterval = setInterval(tick, 1000);
+                    return;
+                }
+
+                if (isNaturalEnd) playBuzzer(3);
+                countdownState = 'idle';
+                setUIState('idle');
+                resetTimersToFull();
+                currentRepeat = 0;
+            }
+
+            function handleReset() {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                isPaused = false;
+                countdownState = 'idle';
+                setUIState('idle');
+                resetTimersToFull();
+                currentRepeat = 0;
+            }
+
+            // --- Event Listeners ---
+            presetSelect.addEventListener('change', () => {
+                customSettingsDiv.classList.toggle('open', presetSelect.value === 'custom');
+                resetTimersToFull();
+                updateDefaultChimeTime();
+            });
+            customSecondsInput.addEventListener('input', () => { resetTimersToFull(); updateDefaultChimeTime(); });
+            customArrowsInput.addEventListener('input', resetTimersToFull);
+            repeatCountInput.addEventListener('input', resetTimersToFull);
+
+            formatSelect.addEventListener('change', () => { setUIState('idle'); resetTimersToFull(); });
+            enableChimeInput.addEventListener('change', () => {
+                const isEnabled = enableChimeInput.checked;
+                chimeTimeInput.disabled = !isEnabled;
+                chimeTimeSetting.classList.toggle('hidden', !isEnabled);
+            });
+
+            startButton.addEventListener('click', async () => { await initializeAudio(); handleStart(); });
+            pauseButton.addEventListener('click', handlePause);
+            changeButton.addEventListener('click', handleChange);
+            stopButton.addEventListener('click', () => {
+                const isNextButton = !nextIcon.classList.contains('hidden');
+                if (isNextButton) handleStop(true);
+                else {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    isPaused = false;
+                    playBuzzer(3);
+                    countdownState = 'idle';
+                    setUIState('idle');
+                    resetTimersToFull();
+                    currentRepeat = 0;
+                }
+            });
+            resetButton.addEventListener('click', handleReset);
+
+            // --- Initial Setup ---
+            window.addEventListener('load', () => {
+                setUIState('idle');
+                resetTimersToFull();
+                const isEnabled = enableChimeInput.checked;
+                chimeTimeInput.disabled = !isEnabled;
+                chimeTimeSetting.classList.toggle('hidden', !isEnabled);
+                updateDefaultChimeTime();
+            });
+        }
+    </script>
+</body>
+
+</html>
